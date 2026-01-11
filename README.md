@@ -1,16 +1,14 @@
-# diabetes_fog_app
+# Fog-Cloud Diabetes Monitoring System
 
-A new Flutter project.
+## Overview
+This repository contains the source code and dataset for the paper titled **"A Hybrid Fog-Cloud Computing Framework for Real-Time Critical Healthcare Monitoring"**. The system utilizes smartphones as Fog Nodes to optimize latency in IoMT environments.
 
-## Getting Started
+## Dataset
+The dataset utilized in this study (`Fog_System_Evaluation_Dataset.csv`) contains simulated physiological readings for 50 patients, demonstrating the system's efficiency in bandwidth reduction and latency optimization.
 
-This project is a starting point for a Flutter application.
+## System Components
+1. **Fog Node (Android App):** Handles local processing and decision making.
+2. **Cloud Server:** Handles long-term storage and visualization.
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Algorithm
+The core logic implements an adaptive 4-state classification algorithm (Critical, Acute, Pre-Alert, Stable).
