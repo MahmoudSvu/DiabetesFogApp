@@ -1,0 +1,212 @@
+{
+  "@@locale": "en",
+  "appTitle": "Diabetes Monitoring",
+  "@appTitle": {
+    "description": "The application title"
+  },
+  "monitoringDashboard": "Monitoring Dashboard",
+  "@monitoringDashboard": {
+    "description": "Main monitoring screen title"
+  },
+  "settings": "Settings",
+  "@settings": {
+    "description": "Settings screen title"
+  },
+  "currentBGL": "Current BGL",
+  "@currentBGL": {
+    "description": "Current blood glucose level label"
+  },
+  "mgdL": "mg/dL",
+  "@mgdL": {
+    "description": "Milligrams per deciliter unit"
+  },
+  "trend": "Trend",
+  "@trend": {
+    "description": "Trend indicator label"
+  },
+  "battery": "Battery",
+  "@battery": {
+    "description": "Battery indicator label"
+  },
+  "adaptiveFrequency": "Adaptive Frequency",
+  "@adaptiveFrequency": {
+    "description": "Adaptive frequency indicator label"
+  },
+  "seconds": "seconds",
+  "@seconds": {
+    "description": "Seconds unit"
+  },
+  "currentState": "Current State",
+  "@currentState": {
+    "description": "Current monitoring state label"
+  },
+  "eventLog": "Event Log",
+  "@eventLog": {
+    "description": "Event log section title"
+  },
+  "location": "Location",
+  "@location": {
+    "description": "Location map section title"
+  },
+  "emergencyNumbers": "Emergency Numbers",
+  "@emergencyNumbers": {
+    "description": "Emergency numbers section title"
+  },
+  "emergencyNumber": "Emergency Number",
+  "@emergencyNumber": {
+    "description": "Emergency number field label"
+  },
+  "required": "Required",
+  "@required": {
+    "description": "Required field indicator"
+  },
+  "watchers": "Watchers",
+  "@watchers": {
+    "description": "Watchers list section title"
+  },
+  "addWatcher": "Add Watcher",
+  "@addWatcher": {
+    "description": "Add watcher button text"
+  },
+  "watcherName": "Watcher Name",
+  "@watcherName": {
+    "description": "Watcher name field label"
+  },
+  "phoneNumber": "Phone Number",
+  "@phoneNumber": {
+    "description": "Phone number field label"
+  },
+  "delete": "Delete",
+  "@delete": {
+    "description": "Delete button text"
+  },
+  "riskThresholds": "Risk Thresholds",
+  "@riskThresholds": {
+    "description": "Risk thresholds section title"
+  },
+  "safetyRange": "Safety Range",
+  "@safetyRange": {
+    "description": "Safety range field label"
+  },
+  "min": "Min",
+  "@min": {
+    "description": "Minimum value label"
+  },
+  "max": "Max",
+  "@max": {
+    "description": "Maximum value label"
+  },
+  "acuteRiskThresholds": "Acute Risk Thresholds",
+  "@acuteRiskThresholds": {
+    "description": "Acute risk thresholds field label"
+  },
+  "lowRange": "Low Range",
+  "@lowRange": {
+    "description": "Low range label"
+  },
+  "highRange": "High Range",
+  "@highRange": {
+    "description": "High range label"
+  },
+  "edgeConnectivity": "Edge Connectivity",
+  "@edgeConnectivity": {
+    "description": "Edge connectivity section title"
+  },
+  "scan": "Scan",
+  "@scan": {
+    "description": "Scan for BLE devices button text"
+  },
+  "deviceID": "Device ID",
+  "@deviceID": {
+    "description": "Device ID field label"
+  },
+  "systemTesting": "System Testing",
+  "@systemTesting": {
+    "description": "System testing section title"
+  },
+  "testEmergencyCall": "Test Emergency Call",
+  "@testEmergencyCall": {
+    "description": "Test emergency call button text"
+  },
+  "save": "Save",
+  "@save": {
+    "description": "Save button text"
+  },
+  "cancel": "Cancel",
+  "@cancel": {
+    "description": "Cancel button text"
+  },
+  "stable": "Stable",
+  "@stable": {
+    "description": "Stable state name"
+  },
+  "preAlert": "Pre-Alert",
+  "@preAlert": {
+    "description": "Pre-alert state name"
+  },
+  "acuteRisk": "Acute Risk",
+  "@acuteRisk": {
+    "description": "Acute risk state name"
+  },
+  "criticalEmergency": "Critical Emergency",
+  "@criticalEmergency": {
+    "description": "Critical emergency state name"
+  },
+  "connecting": "Connecting...",
+  "@connecting": {
+    "description": "Connecting status text"
+  },
+  "connected": "Connected",
+  "@connected": {
+    "description": "Connected status text"
+  },
+  "disconnected": "Disconnected",
+  "@disconnected": {
+    "description": "Disconnected status text"
+  },
+  "connect": "Connect",
+  "@connect": {
+    "description": "Connect button text"
+  },
+  "disconnect": "Disconnect",
+  "@disconnect": {
+    "description": "Disconnect button text"
+  },
+  "pleaseSetEmergencyNumber": "Please set an emergency number first",
+  "@pleaseSetEmergencyNumber": {
+    "description": "Error message when emergency number is not set"
+  },
+  "emergencyCallTestInitiated": "Emergency call test initiated",
+  "@emergencyCallTestInitiated": {
+    "description": "Success message when emergency call test is started"
+  },
+  "error": "Error",
+  "@error": {
+    "description": "Error label"
+  },
+  "locationPermissionRequired": "Location Permission Required",
+  "@locationPermissionRequired": {
+    "description": "Title for location permission dialog"
+  },
+  "locationPermissionMessage": "This app needs location access to send your location in emergency situations. Please grant location permission to continue.",
+  "@locationPermissionMessage": {
+    "description": "Message explaining why location permission is needed"
+  },
+  "grantPermission": "Grant Permission",
+  "@grantPermission": {
+    "description": "Button to grant permission"
+  },
+  "skip": "Skip",
+  "@skip": {
+    "description": "Button to skip permission request"
+  },
+  "locationPermissionDenied": "Location permission is required for emergency features. You can enable it later in settings.",
+  "@locationPermissionDenied": {
+    "description": "Message when permission is denied"
+  },
+  "openSettings": "Open Settings",
+  "@openSettings": {
+    "description": "Button to open app settings"
+  }
+}
+
