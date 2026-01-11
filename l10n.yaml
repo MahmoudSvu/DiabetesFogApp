@@ -1,4 +1,11 @@
+<<<<<<< HEAD
 arb-dir: lib/l10n
 template-arb-file: app_en.arb
 output-localization-file: app_localizations.dart
 
+=======
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+
+>>>>>>> d4e7139cc10f42a45fbc2c4369f740e8a331a287
