@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:diabetes_fog_app/models/bgl_data_model.dart';
 import 'package:diabetes_fog_app/models/monitoring_state.dart';
@@ -9,10 +10,79 @@ class ApiService {
   final DatabaseService _databaseService = DatabaseService();
   final GeolocationService _geolocationService = GeolocationService();
 
-  // الحصول على عنوان API الأساسي من الإعدادات
-  Future<String?> _getApiBaseUrl() async {
-    final settings = await _databaseService.getSettings();
-    return settings?.apiBaseUrl;
+  // عنوان API الأساسي
+  static const String baseUrl = 'http://realestate26-001-site2.ltempurl.com';
+
+  // تسجيل الدخول باستخدام كود المريض
+  Future<String?> login(String patientCode) async {
+    try {
+      // تنظيف الكود من المسافات
+      final cleanCode = patientCode.trim().toUpperCase();
+      final url = Uri.parse('$baseUrl/api/Patient/MobileLogin?code=$cleanCode');
+      
+      print('Attempting to connect to: $url');
+      
+      final response = await http.get(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ).timeout(
+        const Duration(seconds: 30), // زيادة المهلة إلى 30 ثانية
+        onTimeout: () {
+          throw Exception('Request timeout - الخادم لا يستجيب');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        // API يعيد Guid مباشرة كـ string
+        final deviceId = response.body.trim();
+        
+        // إزالة الاقتباسات إذا كانت موجودة
+        final cleanDeviceId = deviceId.replaceAll('"', '').trim();
+        
+        if (cleanDeviceId.isNotEmpty && cleanDeviceId != 'null') {
+          print('Login successful. Device ID: $cleanDeviceId');
+          return cleanDeviceId;
+        } else {
+          print('Invalid device ID received: $deviceId');
+          return null;
+        }
+      } else {
+        print('Login failed: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } on SocketException catch (e) {
+      print('Network error during login: $e');
+      // إعادة المحاولة مرة واحدة
+      try {
+        print('Retrying login...');
+        await Future.delayed(const Duration(seconds: 2));
+        final retryUrl = Uri.parse('$baseUrl/api/Patient/MobileLogin?code=${patientCode.trim().toUpperCase()}');
+        final retryResponse = await http.get(
+          retryUrl,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ).timeout(const Duration(seconds: 30));
+        
+        if (retryResponse.statusCode == 200) {
+          final deviceId = retryResponse.body.trim().replaceAll('"', '').trim();
+          if (deviceId.isNotEmpty && deviceId != 'null') {
+            print('Login successful on retry. Device ID: $deviceId');
+            return deviceId;
+          }
+        }
+      } catch (retryError) {
+        print('Retry also failed: $retryError');
+      }
+      return null;
+    } catch (e) {
+      print('Error during login: $e');
+      return null;
+    }
   }
 
   // إرسال البيانات العادية بشكل دوري (كل 15 دقيقة أثناء الاستقرار)
@@ -20,41 +90,39 @@ class ApiService {
     required String deviceId,
     required BGLDataModel bglData,
     required MonitoringState fogState,
-    required double batteryLevelFog,
+    double? batteryLevelFog,
   }) async {
     try {
-      final apiBaseUrl = await _getApiBaseUrl();
-      if (apiBaseUrl == null || apiBaseUrl.isEmpty) {
-        print('API Base URL is not configured');
-        return false;
-      }
-
-      // الحصول على الموقع
-      final location = _geolocationService.getLastKnownNetworkLocation();
+      // الحصول على الموقع مع العنوان
+      final locationData = await _geolocationService.getLastKnownLocationWithAddress();
       
-      // تحويل timestamp من milliseconds إلى ISO 8601 UTC
-      final timestampUtc = DateTime.fromMillisecondsSinceEpoch(bglData.timestamp, isUtc: true)
-          .toIso8601String();
-
       // تحويل MonitoringState إلى رقم (1=stable, 2=preAlert, 3=acuteRisk, 4=criticalEmergency)
       int fogStateValue = _monitoringStateToInt(fogState);
 
-      // بناء البيانات المرسلة
+      // حساب intervalSent بناءً على الحالة
+      int intervalSent = _getIntervalForState(fogState);
+
+      // استخدام العنوان في lastLocation، أو الإحداثيات إذا لم يتوفر العنوان
+      String lastLocation = locationData['address'] ?? '${locationData['latitude']}, ${locationData['longitude']}';
+
+      // استخدام قيمة البطارية الممررة أو القيمة الافتراضية
+      final batteryLevel = batteryLevelFog ?? 100.0; // القيمة الافتراضية 100%
+
+      // بناء البيانات المرسلة حسب API الجديد
       final payload = {
-        'device_id': deviceId,
-        'timestamp_utc': timestampUtc,
-        'bgl_reading': bglData.bgl,
-        'bgl_trend': bglData.trend,
-        'fog_state': fogStateValue,
-        'battery_level_edge': bglData.battery,
-        'battery_level_fog': batteryLevelFog,
-        'location_lat': location['latitude'],
-        'location_long': location['longitude'],
-        'interval_sent': 900, // 15 دقيقة = 900 ثانية
+        'deviceId': deviceId,
+        'bglreading': bglData.bgl,
+        'bglTrend': bglData.trend,
+        'fogState': fogStateValue,
+        'intervalSent': intervalSent,
+        'lat': locationData['latitude'],
+        'long': locationData['longitude'],
+        'lastLocation': lastLocation,
+        'batteryLevelFog': batteryLevel, // إضافة مستوى البطارية
       };
 
       // إرسال الطلب
-      final url = Uri.parse('$apiBaseUrl/api/v1/data/log');
+      final url = Uri.parse('$baseUrl/api/DataLog/Add');
       final response = await http.post(
         url,
         headers: {
@@ -88,32 +156,39 @@ class ApiService {
     required MonitoringState fogStateFinal,
     required String interventionType,
     required Map<String, dynamic> interventionDetails,
+    double? batteryLevelFog,
   }) async {
     try {
-      final apiBaseUrl = await _getApiBaseUrl();
-      if (apiBaseUrl == null || apiBaseUrl.isEmpty) {
-        print('API Base URL is not configured');
-        return false;
-      }
-
-      // تحويل timestamp إلى ISO 8601 UTC
-      final timestampEvent = DateTime.now().toUtc().toIso8601String();
-
+      // الحصول على الموقع الحالي الحقيقي مع العنوان (في الحالات الحرجة نحتاج موقع دقيق)
+      final locationData = await _geolocationService.getCurrentLocationWithAddress();
+      
       // تحويل MonitoringState إلى رقم
       int fogStateFinalValue = _monitoringStateToInt(fogStateFinal);
 
-      // بناء البيانات المرسلة
+      // حساب intervalSent بناءً على الحالة
+      int intervalSent = _getIntervalForState(fogStateFinal);
+
+      // استخدام العنوان في lastLocation، أو الإحداثيات إذا لم يتوفر العنوان
+      String lastLocation = locationData['address'] ?? '${locationData['latitude']}, ${locationData['longitude']}';
+
+      // استخدام قيمة البطارية الممررة أو القيمة الافتراضية
+      final batteryLevel = batteryLevelFog ?? 100.0; // القيمة الافتراضية 100%
+
+      // بناء البيانات المرسلة حسب API الجديد
       final payload = {
-        'device_id': deviceId,
-        'timestamp_event': timestampEvent,
-        'bgl_trigger': bglTrigger,
-        'fog_state_final': fogStateFinalValue,
-        'intervention_type': interventionType,
-        'intervention_details': interventionDetails,
+        'deviceId': deviceId,
+        'bglreading': bglTrigger,
+        'bglTrend': 0, // يمكن تحديثه لاحقاً
+        'fogState': fogStateFinalValue,
+        'intervalSent': intervalSent,
+        'lat': locationData['latitude'],
+        'long': locationData['longitude'],
+        'lastLocation': lastLocation,
+        'batteryLevelFog': batteryLevel, // إضافة مستوى البطارية
       };
 
-      // إرسال الطلب
-      final url = Uri.parse('$apiBaseUrl/api/v1/events/critical');
+      // إرسال الطلب - استخدام نفس API لإرسال البيانات
+      final url = Uri.parse('$baseUrl/api/DataLog/Add');
       final response = await http.post(
         url,
         headers: {
@@ -151,6 +226,20 @@ class ApiService {
         return 3;
       case MonitoringState.criticalEmergency:
         return 4;
+    }
+  }
+
+  // حساب intervalSent بناءً على الحالة (بالثواني)
+  int _getIntervalForState(MonitoringState state) {
+    switch (state) {
+      case MonitoringState.stable:
+        return 900; // 15 دقيقة = 900 ثانية
+      case MonitoringState.preAlert:
+        return 300; // 5 دقائق = 300 ثانية
+      case MonitoringState.acuteRisk:
+        return 60; // دقيقة واحدة = 60 ثانية
+      case MonitoringState.criticalEmergency:
+        return 30; // 30 ثانية
     }
   }
 }

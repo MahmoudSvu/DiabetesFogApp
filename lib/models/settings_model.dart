@@ -8,6 +8,7 @@ class SettingsModel {
   final double acuteRiskHighMax;
   final String? deviceID;
   final String? apiBaseUrl;
+  final String? patientCode;
 
   SettingsModel({
     this.emergencyNumber,
@@ -19,6 +20,7 @@ class SettingsModel {
     this.acuteRiskHighMax = 300.0,
     this.deviceID,
     this.apiBaseUrl,
+    this.patientCode,
   });
 
   factory SettingsModel.fromJson(Map<String, dynamic> json) {
@@ -32,6 +34,7 @@ class SettingsModel {
       acuteRiskHighMax: (json['acuteRiskHighMax'] as num?)?.toDouble() ?? 300.0,
       deviceID: json['deviceID'] as String?,
       apiBaseUrl: json['apiBaseUrl'] as String?,
+      patientCode: json['patientCode'] as String?,
     );
   }
 
@@ -46,6 +49,7 @@ class SettingsModel {
       'acuteRiskHighMax': acuteRiskHighMax,
       'deviceID': deviceID,
       'apiBaseUrl': apiBaseUrl,
+      'patientCode': patientCode,
     };
   }
 
@@ -59,6 +63,7 @@ class SettingsModel {
     double? acuteRiskHighMax,
     String? deviceID,
     String? apiBaseUrl,
+    String? patientCode,
   }) {
     return SettingsModel(
       emergencyNumber: emergencyNumber ?? this.emergencyNumber,
@@ -70,6 +75,7 @@ class SettingsModel {
       acuteRiskHighMax: acuteRiskHighMax ?? this.acuteRiskHighMax,
       deviceID: deviceID ?? this.deviceID,
       apiBaseUrl: apiBaseUrl ?? this.apiBaseUrl,
+      patientCode: patientCode ?? this.patientCode,
     );
   }
 }

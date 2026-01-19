@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:diabetes_fog_app/providers/monitoring_provider.dart';
 import 'package:diabetes_fog_app/providers/ble_provider.dart';
 import 'package:diabetes_fog_app/providers/locale_provider.dart';
@@ -8,7 +7,11 @@ import 'package:diabetes_fog_app/models/monitoring_state.dart';
 import 'package:diabetes_fog_app/widgets/common_widgets.dart';
 import 'package:diabetes_fog_app/theme/app_theme.dart';
 import 'package:diabetes_fog_app/l10n/app_localizations.dart';
+import 'package:diabetes_fog_app/services/geolocation_service.dart';
+import 'package:diabetes_fog_app/models/event_log_model.dart';
+import 'package:diabetes_fog_app/services/database_service.dart';
 import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class MonitoringDashboard extends ConsumerStatefulWidget {
   const MonitoringDashboard({super.key});
@@ -18,21 +21,109 @@ class MonitoringDashboard extends ConsumerStatefulWidget {
 }
 
 class _MonitoringDashboardState extends ConsumerState<MonitoringDashboard> {
-  GoogleMapController? _mapController;
-  LatLng? _currentLocation;
+  String _selectedPeriod = 'week'; // 'week' or 'month'
+  String? _lastLocationAddress;
+  bool _isLoadingLocation = false;
+  final GeolocationService _geolocationService = GeolocationService();
+  final DatabaseService _databaseService = DatabaseService();
 
   @override
   void initState() {
     super.initState();
-    _initializeLocation();
+    _loadLastLocation();
+    _initializeDefaultEvents();
   }
 
-  Future<void> _initializeLocation() async {
-    // في التطبيق الحقيقي، سيتم الحصول على الموقع من GeolocationService
-    // للتبسيط، سنستخدم موقع افتراضي
+  Future<void> _loadLastLocation() async {
+    try {
+      final locationData = await _geolocationService.getLastKnownLocationWithAddress();
+      setState(() {
+        _lastLocationAddress = locationData['address'] as String?;
+      });
+    } catch (e) {
+      print('Error loading last location: $e');
+    }
+  }
+
+  Future<void> _initializeDefaultEvents() async {
+    // التحقق من وجود أحداث في قاعدة البيانات
+    final existingEvents = await _databaseService.getRecentEvents(limit: 1);
+    
+    // إذا لم تكن هناك أحداث، نضيف 5 أحداث افتراضية
+    if (existingEvents.isEmpty) {
+      final now = DateTime.now();
+      final defaultEvents = [
+        EventLogModel(
+          timestamp: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+          bgl: 120.0,
+          state: MonitoringState.stable,
+          eventType: 'reading',
+          message: 'Normal reading',
+        ),
+        EventLogModel(
+          timestamp: now.subtract(const Duration(hours: 4)).millisecondsSinceEpoch,
+          bgl: 95.0,
+          state: MonitoringState.preAlert,
+          eventType: 'state_change',
+          message: 'BGL below safe range',
+        ),
+        EventLogModel(
+          timestamp: now.subtract(const Duration(hours: 6)).millisecondsSinceEpoch,
+          bgl: 110.0,
+          state: MonitoringState.stable,
+          eventType: 'reading',
+          message: 'Normal reading',
+        ),
+        EventLogModel(
+          timestamp: now.subtract(const Duration(hours: 8)).millisecondsSinceEpoch,
+          bgl: 70.0,
+          state: MonitoringState.acuteRisk,
+          eventType: 'alert',
+          message: 'Acute risk detected',
+        ),
+        EventLogModel(
+          timestamp: now.subtract(const Duration(hours: 10)).millisecondsSinceEpoch,
+          bgl: 130.0,
+          state: MonitoringState.stable,
+          eventType: 'reading',
+          message: 'Normal reading',
+        ),
+      ];
+
+      for (var event in defaultEvents) {
+        await _databaseService.insertEvent(event);
+      }
+
+      // تحديث provider
+      ref.read(eventLogProvider.notifier).refresh();
+    }
+  }
+
+  Future<void> _refreshLocation() async {
     setState(() {
-      _currentLocation = const LatLng(33.5132, 36.2768); // مدينة دمشق
+      _isLoadingLocation = true;
     });
+
+    try {
+      final locationData = await _geolocationService.getCurrentLocationWithAddress();
+      setState(() {
+        _lastLocationAddress = locationData['address'] as String?;
+        _isLoadingLocation = false;
+      });
+    } catch (e) {
+      print('Error refreshing location: $e');
+      setState(() {
+        _isLoadingLocation = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating location: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -89,34 +180,25 @@ class _MonitoringDashboardState extends ConsumerState<MonitoringDashboard> {
       body: RefreshIndicator(
         onRefresh: () async {
           ref.read(eventLogProvider.notifier).refresh();
+          await _loadLastLocation();
         },
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // لوحة الحالة الفورية
-              _buildStatusCard(currentBGL, currentState, l10n, isArabic),
+              // رسم بياني لحالة المريض
+              _buildChartSection(l10n, isArabic),
               
               const SizedBox(height: 16),
               
-              // صف المؤشرات
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildBatteryCard(currentBGL, l10n),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildFrequencyCard(adaptiveInterval, l10n),
-                  ),
-                ],
-              ),
+              // صف الحالة الحالية مع البطارية والتردد
+              _buildStatusRow(currentBGL, currentState, adaptiveInterval, l10n, isArabic),
               
               const SizedBox(height: 16),
               
-              // خريطة الموقع
-              _buildLocationMap(l10n),
+              // الموقع النصي مع زر التحديث
+              _buildLocationSection(l10n, isArabic),
               
               const SizedBox(height: 16),
               
@@ -170,160 +252,262 @@ class _MonitoringDashboardState extends ConsumerState<MonitoringDashboard> {
     );
   }
 
-  Widget _buildStatusCard(currentBGL, currentState, l10n, isArabic) {
+  Widget _buildChartSection(l10n, isArabic) {
     return InfoCard(
-      title: l10n.currentState,
-      icon: Icons.monitor_heart,
+      title: isArabic ? 'حالة المريض' : 'Patient Status',
+      icon: Icons.show_chart,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (currentBGL != null) ...[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  l10n.currentBGL,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white),
-                ),
-                Text(
-                  '${currentBGL.bgl.toStringAsFixed(1)} ${l10n.mgdL}',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.getStateColor(currentState.index),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  l10n.trend,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white),
-                ),
-                _buildTrendIndicator(currentBGL.trend),
-              ],
-            ),
-          ] else ...[
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Icon(Icons.signal_wifi_off, size: 48, color: Colors.white.withOpacity(0.5)),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No data available',
-                      style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Waiting for device connection...',
-                      style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          // خيارات الفترة الزمنية
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildPeriodButton('week', isArabic ? 'أسبوع' : 'Week', isArabic),
+              const SizedBox(width: 16),
+              _buildPeriodButton('month', isArabic ? 'شهر' : 'Month', isArabic),
+            ],
+          ),
           const SizedBox(height: 16),
-          StateIndicator(
-            state: currentState,
-            isArabic: isArabic,
+          // الرسم البياني
+          SizedBox(
+            height: 200,
+            child: _buildChart(_selectedPeriod, ref.watch(eventLogProvider)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTrendIndicator(int trend) {
-    IconData icon;
-    Color color;
-    String text;
+  Widget _buildPeriodButton(String period, String label, bool isArabic) {
+    final isSelected = _selectedPeriod == period;
+    return Expanded(
+      child: ElevatedButton(
+        onPressed: () {
+          setState(() {
+            _selectedPeriod = period;
+          });
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isSelected ? const Color(0xFF041E76) : Colors.white.withOpacity(0.2),
+          foregroundColor: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
 
-    if (trend > 0) {
-      icon = Icons.arrow_upward;
-      color = Colors.red;
-      text = 'Rising';
-    } else if (trend < 0) {
-      icon = Icons.arrow_downward;
-      color = Colors.blue;
-      text = 'Falling';
-    } else {
-      icon = Icons.arrow_forward;
-      color = Colors.grey;
-      text = 'Stable';
+  Widget _buildChart(String period, List<EventLogModel> eventLog) {
+    // استخدام البيانات الحقيقية من eventLog
+    final isWeek = period == 'week';
+    final daysToShow = isWeek ? 7 : 30;
+    final cutoffTime = DateTime.now().subtract(Duration(days: daysToShow)).millisecondsSinceEpoch;
+    
+    // تصفية الأحداث حسب الفترة المحددة
+    final filteredEvents = eventLog
+        .where((event) => event.timestamp >= cutoffTime)
+        .toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    
+    // إذا لم تكن هناك بيانات كافية، نستخدم البيانات المتاحة
+    if (filteredEvents.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Text(
+            'No data available for selected period',
+            style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
+          ),
+        ),
+      );
+    }
+    
+    // تحويل الأحداث إلى نقاط للرسم البياني
+    final spots = <FlSpot>[];
+    final now = DateTime.now();
+    
+    for (int i = 0; i < filteredEvents.length; i++) {
+      final event = filteredEvents[i];
+      final eventDate = DateTime.fromMillisecondsSinceEpoch(event.timestamp);
+      final daysAgo = now.difference(eventDate).inDays;
+      final x = (daysToShow - daysAgo).toDouble();
+      spots.add(FlSpot(x, event.bgl));
+    }
+    
+    // حساب minY و maxY
+    double minY = 50.0;
+    double maxY = 200.0;
+    if (spots.isNotEmpty) {
+      final yValues = spots.map((s) => s.y).toList();
+      minY = (yValues.reduce((a, b) => a < b ? a : b) - 20).clamp(0.0, double.infinity);
+      maxY = (yValues.reduce((a, b) => a > b ? a : b) + 20).clamp(0.0, 300.0);
     }
 
+    return LineChart(
+      LineChartData(
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: 20,
+          getDrawingHorizontalLine: (value) {
+            return FlLine(
+              color: Colors.white.withOpacity(0.1),
+              strokeWidth: 1,
+            );
+          },
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 30,
+              interval: isWeek ? 1 : 5,
+              getTitlesWidget: (value, meta) {
+                final daysAgo = (isWeek ? 7 : 30) - value.toInt();
+                if (daysAgo < 0 || daysAgo > (isWeek ? 7 : 30)) return const Text('');
+                final date = DateTime.now().subtract(Duration(days: daysAgo));
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    DateFormat('d/M').format(date),
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 10,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 40,
+              interval: 20,
+              getTitlesWidget: (value, meta) {
+                return Text(
+                  value.toInt().toString(),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 10,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        borderData: FlBorderData(
+          show: true,
+          border: Border.all(color: Colors.white.withOpacity(0.2)),
+        ),
+        minX: 0,
+        maxX: (isWeek ? 7 : 30).toDouble(),
+        minY: minY,
+        maxY: maxY,
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: const Color(0xFF041E76),
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(
+              show: true,
+              color: const Color(0xFF041E76).withOpacity(0.2),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusRow(currentBGL, currentState, adaptiveInterval, l10n, isArabic) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(width: 4),
-        Text(
-          text,
-          style: TextStyle(color: color, fontWeight: FontWeight.bold),
+        // التردد التكيفي (على اليسار)
+        Expanded(
+          child: _buildFrequencyCard(adaptiveInterval, l10n),
+        ),
+        const SizedBox(width: 16),
+        // الحالة الحالية (في الوسط)
+        Expanded(
+          flex: 2,
+          child: _buildStatusCard(currentBGL, currentState, l10n, isArabic),
+        ),
+        const SizedBox(width: 16),
+        // البطارية (على اليمين)
+        Expanded(
+          child: _buildBatteryCard(currentBGL, l10n),
         ),
       ],
+    );
+  }
+
+  Widget _buildStatusCard(currentBGL, currentState, l10n, isArabic) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: StateIndicator(
+            state: currentState,
+            isArabic: isArabic,
+          ),
+        ),
+      ),
     );
   }
 
   Widget _buildBatteryCard(currentBGL, l10n) {
     final batteryLevel = currentBGL?.battery ?? 0.0;
     
-    return InfoCard(
-      title: l10n.battery,
-      icon: batteryLevel > 20 ? Icons.battery_charging_full : Icons.battery_alert,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (currentBGL != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: batteryLevel / 100,
-                minHeight: 8,
-                backgroundColor: Colors.white.withOpacity(0.3),
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  batteryLevel > 50 ? Colors.green : 
-                  batteryLevel > 20 ? Colors.orange : Colors.red,
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (currentBGL != null) ...[
+              Icon(
+                batteryLevel > 50 ? Icons.battery_full :
+                batteryLevel > 20 ? Icons.battery_3_bar : Icons.battery_alert,
+                color: batteryLevel > 50 ? Colors.green :
+                batteryLevel > 20 ? Colors.orange : Colors.red,
+                size: 32,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${batteryLevel.toStringAsFixed(0)}%',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: batteryLevel > 20 ? Colors.white : Colors.red,
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${batteryLevel.toStringAsFixed(0)}%',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: batteryLevel > 20 ? Colors.black87 : Colors.red,
-                  ),
-                ),
-                Icon(
-                  batteryLevel > 50 ? Icons.battery_full :
-                  batteryLevel > 20 ? Icons.battery_3_bar : Icons.battery_alert,
-                  color: batteryLevel > 50 ? Colors.green :
-                  batteryLevel > 20 ? Colors.orange : Colors.red,
-                ),
-              ],
-            ),
-          ] else ...[
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Text(
-                  'N/A',
-                  style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
-                ),
+            ] else ...[
+              Icon(Icons.battery_unknown, size: 32, color: Colors.white.withOpacity(0.5)),
+              const SizedBox(height: 8),
+              Text(
+                'N/A',
+                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 16),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -334,87 +518,107 @@ class _MonitoringDashboardState extends ConsumerState<MonitoringDashboard> {
     Color color;
     
     if (interval <= 60) {
-      intervalText = '$interval ${l10n.seconds}';
+      intervalText = '$interval s';
       icon = Icons.speed;
       color = Colors.red;
     } else if (interval <= 300) {
-      intervalText = '${(interval / 60).toStringAsFixed(0)} min';
+      intervalText = '${(interval / 60).toStringAsFixed(0)}m';
       icon = Icons.timer;
       color = Colors.orange;
     } else {
-      intervalText = '${(interval / 60).toStringAsFixed(0)} min';
+      intervalText = '${(interval / 60).toStringAsFixed(0)}m';
       icon = Icons.schedule;
       color = Colors.green;
     }
     
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 8),
+            Text(
+              intervalText,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLocationSection(l10n, isArabic) {
     return InfoCard(
-      title: l10n.adaptiveFrequency,
-      icon: icon,
+      title: l10n.location,
+      icon: Icons.location_on,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                intervalText,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: color,
+          // العنوان النصي
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.place, color: Colors.white.withOpacity(0.8), size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _lastLocationAddress ?? (isArabic ? 'جاري تحميل الموقع...' : 'Loading location...'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
-              ),
-              Icon(icon, color: color, size: 24),
-            ],
+              ],
+            ),
           ),
-      const SizedBox(height: 8),
-      Text(
-        'Update interval',
-        style: TextStyle(
-          fontSize: 12,
-          color: Colors.white.withOpacity(0.7),
-        ),
-      ),
+          const SizedBox(height: 12),
+          // زر التحديث
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isLoadingLocation ? null : _refreshLocation,
+              icon: _isLoadingLocation
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.refresh),
+              label: Text(isArabic ? 'تحديث الموقع' : 'Refresh Location'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF041E76),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildLocationMap(l10n) {
-    return InfoCard(
-      title: l10n.location,
-      icon: Icons.location_on,
-      child: SizedBox(
-        height: 200,
-        child: _currentLocation != null
-            ? GoogleMap(
-                initialCameraPosition: CameraPosition(
-                  target: _currentLocation!,
-                  zoom: 15,
-                ),
-                markers: {
-                  Marker(
-                    markerId: const MarkerId('patient_location'),
-                    position: _currentLocation!,
-                    infoWindow: const InfoWindow(title: 'Patient Location'),
-                  ),
-                },
-                onMapCreated: (controller) {
-                  _mapController = controller;
-                },
-              )
-            : const Center(
-                child: CircularProgressIndicator(),
-              ),
-      ),
-    );
-  }
-
   Widget _buildEventLog(List eventLog, l10n, isArabic) {
+    // عرض آخر 5 أحداث
+    final displayEvents = eventLog.take(5).toList();
+    
     return InfoCard(
       title: l10n.eventLog,
       icon: Icons.history,
-      child: eventLog.isEmpty
+      child: displayEvents.isEmpty
           ? Center(
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -423,13 +627,8 @@ class _MonitoringDashboardState extends ConsumerState<MonitoringDashboard> {
                     Icon(Icons.history, size: 48, color: Colors.white.withOpacity(0.5)),
                     const SizedBox(height: 8),
                     Text(
-                      'No events yet',
+                      isArabic ? 'لا توجد أحداث' : 'No events yet',
                       style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Events will appear here',
-                      style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
                     ),
                   ],
                 ),
@@ -440,11 +639,11 @@ class _MonitoringDashboardState extends ConsumerState<MonitoringDashboard> {
                 ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: eventLog.length > 10 ? 10 : eventLog.length,
+                  itemCount: displayEvents.length,
                   itemBuilder: (context, index) {
-                    final event = eventLog[index];
+                    final event = displayEvents[index];
                     final dateTime = DateTime.fromMillisecondsSinceEpoch(event.timestamp);
-                    final formattedDate = DateFormat('HH:mm:ss').format(dateTime);
+                    final formattedDate = DateFormat('HH:mm').format(dateTime);
                     final formattedDateFull = DateFormat('MMM dd, HH:mm').format(dateTime);
                     
                     return Card(
@@ -474,7 +673,9 @@ class _MonitoringDashboardState extends ConsumerState<MonitoringDashboard> {
                           children: [
                             const SizedBox(height: 4),
                             Text(
-                              isArabic ? event.state.displayNameAr : event.state.displayName,
+                              isArabic 
+                                ? _getStateNameAr(event.state)
+                                : event.state.displayName,
                               style: TextStyle(
                                 color: AppTheme.getStateColor(event.state.index),
                                 fontWeight: FontWeight.w500,
@@ -494,18 +695,22 @@ class _MonitoringDashboardState extends ConsumerState<MonitoringDashboard> {
                     );
                   },
                 ),
-                if (eventLog.length > 10)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(
-                      'Showing latest 10 of ${eventLog.length} events',
-                      style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
               ],
             ),
     );
   }
-}
 
+  // Helper method to get Arabic state name safely
+  String _getStateNameAr(MonitoringState state) {
+    switch (state) {
+      case MonitoringState.stable:
+        return 'مستقر';
+      case MonitoringState.preAlert:
+        return 'إنذار مسبق';
+      case MonitoringState.acuteRisk:
+        return 'خطر حاد';
+      case MonitoringState.criticalEmergency:
+        return 'طوارئ حرجة';
+    }
+  }
+}

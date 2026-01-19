@@ -39,7 +39,8 @@ class DatabaseService {
         acuteRiskHighMin REAL DEFAULT 250.0,
         acuteRiskHighMax REAL DEFAULT 300.0,
         deviceID TEXT,
-        apiBaseUrl TEXT
+        apiBaseUrl TEXT,
+        patientCode TEXT
       )
     ''');
 

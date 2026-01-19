@@ -5,8 +5,10 @@ import 'package:diabetes_fog_app/l10n/app_localizations.dart';
 import 'package:diabetes_fog_app/screens/monitoring_dashboard.dart';
 import 'package:diabetes_fog_app/screens/settings_screen.dart';
 import 'package:diabetes_fog_app/screens/welcome_screen.dart';
+import 'package:diabetes_fog_app/screens/login_screen.dart';
 import 'package:diabetes_fog_app/theme/app_theme.dart';
 import 'package:diabetes_fog_app/providers/locale_provider.dart';
+import 'package:diabetes_fog_app/providers/auth_provider.dart';
 import 'package:diabetes_fog_app/services/database_service.dart';
 import 'package:diabetes_fog_app/services/permission_service.dart';
 
@@ -46,14 +48,14 @@ class MyApp extends ConsumerWidget {
   }
 }
 
-class AppInitializer extends StatefulWidget {
+class AppInitializer extends ConsumerStatefulWidget {
   const AppInitializer({super.key});
 
   @override
-  State<AppInitializer> createState() => _AppInitializerState();
+  ConsumerState<AppInitializer> createState() => _AppInitializerState();
 }
 
-class _AppInitializerState extends State<AppInitializer> {
+class _AppInitializerState extends ConsumerState<AppInitializer> {
   bool _isLoading = true;
   bool _hasSeenWelcome = false;
 
@@ -331,7 +333,9 @@ class _AppInitializerState extends State<AppInitializer> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    final authState = ref.watch(authProvider);
+    
+    if (_isLoading || authState.isLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFF041E76),
         body: Center(
@@ -342,9 +346,18 @@ class _AppInitializerState extends State<AppInitializer> {
       );
     }
 
-    return _hasSeenWelcome
-        ? const MainNavigationScreen()
-        : const WelcomeScreen();
+    // إذا لم يكن المستخدم مسجل دخول، اعرض صفحة تسجيل الدخول
+    if (!authState.isAuthenticated) {
+      return const LoginScreen();
+    }
+
+    // إذا كان مسجل دخول ولكن لم يرى شاشة الترحيب، اعرضها
+    if (!_hasSeenWelcome) {
+      return const WelcomeScreen();
+    }
+
+    // كل شيء جاهز - اعرض الشاشة الرئيسية
+    return const MainNavigationScreen();
   }
 }
 

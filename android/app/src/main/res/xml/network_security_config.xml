@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- السماح بالاتصالات HTTP للخادم المحدد -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">realestate26-001-site2.ltempurl.com</domain>
+    </domain-config>
+    
+    <!-- السماح بالاتصالات HTTP لجميع الخوادم (للتطوير فقط - يمكن تقييده لاحقاً) -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:diabetes_fog_app/providers/monitoring_provider.dart';
+import 'package:diabetes_fog_app/providers/auth_provider.dart';
 import 'package:diabetes_fog_app/services/api_service.dart';
 import 'package:diabetes_fog_app/models/monitoring_state.dart';
-import 'package:diabetes_fog_app/services/database_service.dart';
 
 // Provider لخدمة API
 final apiServiceProvider = Provider<ApiService>((ref) {
@@ -18,7 +18,6 @@ final periodicDataProvider = StateNotifierProvider<PeriodicDataNotifier, bool>((
 class PeriodicDataNotifier extends StateNotifier<bool> {
   final Ref _ref;
   Timer? _periodicTimer;
-  final DatabaseService _databaseService = DatabaseService();
 
   PeriodicDataNotifier(this._ref) : super(false);
 
@@ -62,11 +61,11 @@ class PeriodicDataNotifier extends StateNotifier<bool> {
         return;
       }
 
-      // الحصول على الإعدادات
-      final settings = await _databaseService.getSettings();
-      final deviceId = settings?.deviceID;
+      // الحصول على deviceId من authProvider
+      final authState = _ref.read(authProvider);
+      final deviceId = authState.deviceId;
       if (deviceId == null || deviceId.isEmpty) {
-        print('Device ID is not configured');
+        print('Device ID is not available - user not logged in');
         return;
       }
 

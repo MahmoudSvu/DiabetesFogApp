@@ -6,6 +6,8 @@ import 'package:diabetes_fog_app/widgets/edge_connectivity_section.dart';
 import 'package:diabetes_fog_app/widgets/system_testing_section.dart';
 import 'package:diabetes_fog_app/l10n/app_localizations.dart';
 import 'package:diabetes_fog_app/providers/locale_provider.dart';
+import 'package:diabetes_fog_app/providers/auth_provider.dart';
+import 'package:diabetes_fog_app/main.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -48,6 +50,12 @@ class SettingsScreen extends ConsumerWidget {
             },
             tooltip: isArabic ? 'Switch to English' : 'التبديل إلى العربية',
           ),
+          // زر تسجيل الخروج
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () => _showLogoutDialog(context, ref),
+            tooltip: isArabic ? 'تسجيل الخروج' : 'Logout',
+          ),
         ],
       ),
       body: SingleChildScrollView(
@@ -70,6 +78,53 @@ class SettingsScreen extends ConsumerWidget {
             const SystemTestingSection(),
           ],
         ),
+      ),
+    );
+  }
+
+  static void _showLogoutDialog(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final isArabic = ref.read(localeProvider).languageCode == 'ar';
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.logout, color: Colors.red),
+            const SizedBox(width: 8),
+            Text(isArabic ? 'تسجيل الخروج' : 'Logout'),
+          ],
+        ),
+        content: Text(
+          isArabic 
+              ? 'هل أنت متأكد من تسجيل الخروج؟ ستحتاج إلى إدخال كود المريض مرة أخرى للدخول.'
+              : 'Are you sure you want to logout? You will need to enter your patient code again to login.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.cancel),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await ref.read(authProvider.notifier).logout();
+              if (context.mounted) {
+                // الانتقال مباشرة إلى شاشة تسجيل الدخول مع مسح كل الصفحات السابقة
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const AppInitializer()),
+                  (Route<dynamic> route) => false,
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(isArabic ? 'تسجيل الخروج' : 'Logout'),
+          ),
+        ],
       ),
     );
   }

@@ -64,12 +64,14 @@ class EmergencyService {
         'address_geocode': addressGeocode,
       };
 
+      // استخدام قيمة افتراضية للبطارية (100%) إذا لم تتوفر
       await _apiService.sendCriticalEvent(
         deviceId: deviceId,
         bglTrigger: bgl,
         fogStateFinal: MonitoringState.criticalEmergency,
         interventionType: 'EMERGENCY_CALL',
         interventionDetails: interventionDetails,
+        batteryLevelFog: 100.0, // قيمة افتراضية
       );
 
       print('Critical Call Triggered! BGL: $bgl, Location: ${locationData['latitude']}, ${locationData['longitude']}');
